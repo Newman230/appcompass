@@ -1,0 +1,43 @@
+# Local stack: Postgres + pgvector and the AppCompass server.
+#   docker compose -f infra/docker-compose.yml up --build
+# Same stack runs on the Oracle Cloud Always Free demo server.
+
+name: appcompass
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: appcompass
+      POSTGRES_PASSWORD: ${APPCOMPASS_DB_PASSWORD:-appcompass}
+      POSTGRES_DB: appcompass
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appcompass -d appcompass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:5432:5432"   # local only; never expose the database publicly
+
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      APPCOMPASS_DATABASE_URL: postgresql://appcompass:${APPCOMPASS_DB_PASSWORD:-appcompass}@db:5432/appcompass
+      APPCOMPASS_SESSION_TTL_MINUTES: "30"
+      APPCOMPASS_LLM_PROVIDER: claude
+      APPCOMPASS_EMBEDDER: local-multilingual
+      APPCOMPASS_VECTOR_STORE: pgvector
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../examples:/srv/examples:ro   # so the CLI can load the clinic manifest
+
+volumes:
+  db-data:

@@ -1,0 +1,387 @@
+openapi: 3.1.0
+info:
+  title: AppCompass API
+  version: 1.0.0
+  summary: In-app AI support agent ("your app guide"). Platform-neutral contract for every client SDK.
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    Every request is scoped to one app through its API key. A key can only
+    read and write its own app's data; using another app's `app_id` in a
+    path returns 403.
+
+    Week 1 status: `health`, `sessions` and the manifest endpoints are
+    implemented. `messages`, `feedback` and `docs` return 501 until Week 2.
+servers:
+  - url: http://localhost:8080
+    description: Local Docker Compose
+security:
+  - AppKey: []
+tags:
+  - name: system
+  - name: sessions
+  - name: apps
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Liveness and database check
+      security: []
+      responses:
+        "200":
+          description: Service and database are up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /v1/sessions:
+    post:
+      tags: [sessions]
+      operationId: createSession
+      summary: Start a conversation session for the calling app
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreate"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/sessions/{session_id}/messages:
+    post:
+      tags: [sessions]
+      operationId: sendMessage
+      summary: Ask a question; the answer streams back as Server-Sent Events
+      description: Event types and order are defined in spec/events.md.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageCreate"
+      responses:
+        "200":
+          description: SSE stream of token, citation, action, handoff, error and done events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/NotImplemented"
+
+  /v1/sessions/{session_id}/feedback:
+    post:
+      tags: [sessions]
+      operationId: sendFeedback
+      summary: Thumbs up or down on an answer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Feedback"
+      responses:
+        "204":
+          description: Recorded
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          $ref: "#/components/responses/NotImplemented"
+
+  /v1/apps/{app_id}/manifest:
+    get:
+      tags: [apps]
+      operationId: getManifest
+      summary: Get the app's current manifest
+      parameters:
+        - $ref: "#/components/parameters/AppId"
+      responses:
+        "200":
+          description: Current manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Manifest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [apps]
+      operationId: putManifest
+      summary: Upload or replace the app's manifest
+      description: Validated against spec/manifest.schema.json. `version` must be higher than the stored one.
+      parameters:
+        - $ref: "#/components/parameters/AppId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Manifest"
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManifestStored"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/apps/{app_id}/docs:
+    post:
+      tags: [apps]
+      operationId: uploadDocs
+      summary: Upload help articles for ingestion into the knowledge base
+      parameters:
+        - $ref: "#/components/parameters/AppId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocsUpload"
+      responses:
+        "202":
+          description: Accepted for ingestion
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "501":
+          $ref: "#/components/responses/NotImplemented"
+
+components:
+  securitySchemes:
+    AppKey:
+      type: apiKey
+      in: header
+      name: X-AppCompass-Key
+
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AppId:
+      name: app_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The key does not belong to this app
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found for this app
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Version is not higher than the stored one
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotImplemented:
+      description: Planned for a later week of the v1 build
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [bad_request, unauthorized, forbidden, not_found, conflict, validation_error, not_implemented, session_expired, rate_limited, upstream_unavailable, internal]
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+
+    Health:
+      type: object
+      required: [status, database]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        database:
+          type: string
+          enum: [ok, unavailable]
+        version:
+          type: string
+
+    SessionCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        locale:
+          type: string
+          pattern: "^[a-z]{2}(-[A-Z]{2})?$"
+          description: Preferred answer language. Defaults to the manifest's first locale, else "en".
+        client:
+          type: object
+          additionalProperties: false
+          description: Diagnostic info about the SDK. Never personal data.
+          properties:
+            sdk:
+              type: string
+              examples: ["flutter"]
+            sdk_version:
+              type: string
+            app_version:
+              type: string
+
+    Session:
+      type: object
+      required: [session_id, app_id, locale, created_at, expires_at]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        app_id:
+          type: string
+        locale:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    MessageCreate:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        screen_id:
+          type: string
+          description: Id of the screen the user is on, from the manifest.
+        locale:
+          type: string
+          pattern: "^[a-z]{2}(-[A-Z]{2})?$"
+
+    Feedback:
+      type: object
+      additionalProperties: false
+      required: [message_id, rating]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        rating:
+          type: string
+          enum: [up, down]
+        comment:
+          type: string
+          maxLength: 500
+
+    Manifest:
+      description: Full schema in spec/manifest.schema.json.
+      type: object
+      required: [app_id, version, locales, screens, actions]
+      additionalProperties: true
+
+    ManifestStored:
+      type: object
+      required: [app_id, version, stored_at]
+      properties:
+        app_id:
+          type: string
+        version:
+          type: integer
+        stored_at:
+          type: string
+          format: date-time
+
+    DocsUpload:
+      type: object
+      required: [articles]
+      properties:
+        articles:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id, title, body]
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              screens:
+                type: array
+                items:
+                  type: string
+              locale:
+                type: string
+              body:
+                type: string
+                description: Markdown

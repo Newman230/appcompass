@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appcompass.dev/spec/manifest/v1.schema.json",
+  "title": "AppCompass app manifest (v1)",
+  "description": "Describes a host app to AppCompass: its screens, the actions the agent may offer, and domain rules. Platform-neutral: the same manifest works for Flutter, React Native, web or native apps.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["app_id", "version", "locales", "screens", "actions"],
+  "properties": {
+    "app_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "Stable identifier for the app. Must match the app the API key belongs to."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Manifest version. Increment on every change."
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "Human-readable app name used in answers."
+    },
+    "locales": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/locale" },
+      "description": "Languages the agent may answer in. First entry is the default."
+    },
+    "domain_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "no_medical_advice": {
+          "type": "boolean",
+          "default": false,
+          "description": "Refuse diagnosis, treatment or medication questions and point to a clinician."
+        },
+        "no_financial_advice": {
+          "type": "boolean",
+          "default": false,
+          "description": "Refuse investment or product-suitability advice."
+        },
+        "handoff_contact": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Where users are sent when the agent hands off (email, phone or URL)."
+        },
+        "extra_instructions": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Plain-language rules specific to this app. Cannot override AppCompass safety rules."
+        }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/screen" }
+    },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action" },
+      "description": "Actions the agent may offer as buttons. The host app executes them via its onAction callback."
+    }
+  },
+  "$defs": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+      "examples": ["en", "ar", "ar-QA"]
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "description"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "maxLength": 80 },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "What the user can do on this screen, in plain words."
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "params"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "description": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "When the agent should offer this action. Shown to the model as the tool description."
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Default button label. The agent may produce a more specific one."
+        },
+        "params": {
+          "type": "object",
+          "description": "Parameter name to type. 'string', 'integer', 'boolean', or 'enum:screens' (any declared screen id).",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["string", "integer", "boolean", "enum:screens"]
+          }
+        }
+      }
+    }
+  }
+}

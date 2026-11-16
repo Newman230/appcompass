@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Env and secrets
+.env
+*.key
+
+# Flutter
+examples/clinic_demo/app/.dart_tool/
+examples/clinic_demo/app/build/
+examples/clinic_demo/app/.flutter-plugins*
+examples/clinic_demo/app/.packages
+examples/clinic_demo/app/pubspec.lock
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

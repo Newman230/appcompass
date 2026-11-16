@@ -1,0 +1,58 @@
+{
+  "app_id": "clinic-demo",
+  "version": 1,
+  "name": "Northwind Clinic (demo)",
+  "locales": ["en", "ar"],
+  "domain_rules": {
+    "no_medical_advice": true,
+    "handoff_contact": "support@clinic-demo.example",
+    "extra_instructions": "This is a fictional clinic used to demonstrate AppCompass. Help people use the app: booking, changing and cancelling appointments, profile and family settings. Never comment on symptoms, diagnoses, test results or medicines; suggest booking an appointment or calling emergency services instead."
+  },
+  "screens": [
+    {
+      "id": "home",
+      "title": "Home",
+      "description": "Next appointment card, quick links to book, appointments and help, and clinic opening hours."
+    },
+    {
+      "id": "book",
+      "title": "Book appointment",
+      "description": "Pick a specialty, clinic branch, doctor and time slot, choose in-person or video visit, choose who the visit is for (you or a family member), then confirm."
+    },
+    {
+      "id": "appointments",
+      "title": "My appointments",
+      "description": "Upcoming and past appointments. Tap an upcoming appointment to reschedule, cancel, join a video visit or add it to your calendar."
+    },
+    {
+      "id": "profile",
+      "title": "Profile and settings",
+      "description": "Contact details, family members, language, and notification settings."
+    },
+    {
+      "id": "help",
+      "title": "Help",
+      "description": "Help articles, contact support, privacy information, and the AppCompass assistant."
+    }
+  ],
+  "actions": [
+    {
+      "id": "navigate",
+      "description": "Offer to open a screen in the app when the answer involves doing something on that screen.",
+      "label": "Open screen",
+      "params": { "screen_id": "enum:screens" }
+    },
+    {
+      "id": "open_help_article",
+      "description": "Offer to open the full help article that the answer is based on.",
+      "label": "Read the full article",
+      "params": { "article_id": "string" }
+    },
+    {
+      "id": "escalate_to_human",
+      "description": "Offer to contact clinic support when the question is outside the help articles, the user asks for a person, or the question is medical.",
+      "label": "Contact support",
+      "params": {}
+    }
+  ]
+}
