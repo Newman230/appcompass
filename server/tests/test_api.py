@@ -113,14 +113,7 @@ def test_key_cannot_use_another_apps_session(client, clinic_headers, other_heade
     assert r.status_code == 404
 
 
-# ---------- later weeks ----------
-
-
-def test_messages_are_501_until_week_2(client, clinic_headers):
-    sid = client.post("/v1/sessions", headers=clinic_headers).json()["session_id"]
-    r = client.post(f"/v1/sessions/{sid}/messages", json={"text": "How do I reschedule?"}, headers=clinic_headers)
-    assert r.status_code == 501
-    assert r.json()["code"] == "not_implemented"
+# ---------- sessions ----------
 
 
 def test_unknown_session_is_404(client, clinic_headers):

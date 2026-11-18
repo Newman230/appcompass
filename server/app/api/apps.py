@@ -8,7 +8,10 @@ from ..config import get_settings
 from ..db import get_pool
 from ..errors import ApiError
 from ..manifest import validate_manifest
-from .schemas import ManifestStored
+from ..core.ports import Article
+from ..ingest import check_screens, ingest
+from .. import wiring
+from .schemas import DocsIngested, DocsUpload, ManifestStored
 
 router = APIRouter(prefix="/v1/apps", tags=["apps"])
 
@@ -50,7 +53,24 @@ def put_manifest(app_id: str, manifest: dict = Body(...), caller: CallerApp = De
     return ManifestStored(app_id=app_id, version=manifest["version"], stored_at=row["stored_at"])
 
 
-@router.post("/{app_id}/docs", status_code=202, operation_id="uploadDocs")
-def upload_docs(app_id: str, caller: CallerApp = Depends(caller_app)):
+@router.post("/{app_id}/docs", status_code=202, response_model=DocsIngested, operation_id="uploadDocs")
+def upload_docs(app_id: str, body: DocsUpload, caller: CallerApp = Depends(caller_app)) -> DocsIngested:
+    """Chunk, embed and store help articles. Re-uploading an article replaces it."""
     require_same_app(caller, app_id)
-    raise ApiError(501, "not_implemented", "Doc ingestion arrives in Week 2")
+    articles = [
+        Article(article_id=a.id, title=a.title, body=a.body, locale=a.locale, screen_ids=tuple(a.screens))
+        for a in body.articles
+    ]
+    ids = [a.article_id for a in articles]
+    if len(set(ids)) != len(ids):
+        raise ApiError(422, "validation_error", "Duplicate article ids in upload")
+    with get_pool().connection() as conn:
+        row = conn.execute(
+            "SELECT body FROM manifests WHERE app_id = %s ORDER BY version DESC LIMIT 1", (app_id,)
+        ).fetchone()
+    problems = check_screens(articles, row["body"] if row else None)
+    if problems:
+        raise ApiError(422, "validation_error", "Articles reference screens that are not in the manifest", problems)
+    embedder = wiring.embedder()
+    n_articles, n_chunks = ingest(app_id, articles, embedder, wiring.build_store(get_settings()))
+    return DocsIngested(app_id=app_id, articles=n_articles, chunks=n_chunks, embedder=embedder.name)

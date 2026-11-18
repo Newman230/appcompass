@@ -5,7 +5,8 @@ SDK. Adapters (Claude, pgvector, a local embedding model, ...) live in
 app/adapters/ and are chosen in config. Every adapter for a port must pass
 that port's contract tests.
 
-Week 1 defines the ports; the first adapters arrive in Week 2.
+Week 2 adapters: Claude (LLM), fastembed or hash (embeddings), pgvector
+(vector store), plus an offline 'extractive' LLM stand-in for development.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ class Chunk:
 
     app_id: str
     article_id: str
+    chunk_index: int
     title: str
     text: str
     locale: str
@@ -103,25 +105,42 @@ class Embedder(Protocol):
     """Local multilingual model today; any hosted embedding API later."""
 
     @property
+    def name(self) -> str:
+        """Stable id stored with every vector, so vectors from different models never mix."""
+        ...
+
+    @property
     def dimensions(self) -> int: ...
 
-    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+    def embed_query(self, text: str) -> list[float]: ...
 
 
 @runtime_checkable
 class VectorStore(Protocol):
     """pgvector today; Qdrant or OpenSearch later. Always scoped by app_id."""
 
-    def upsert(self, chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None: ...
+    def replace_article(
+        self,
+        app_id: str,
+        article_id: str,
+        embedder: str,
+        chunks: Sequence[Chunk],
+        vectors: Sequence[Sequence[float]],
+    ) -> None:
+        """Atomically swap all chunks of one article for new ones."""
+        ...
 
     def search(
         self,
         app_id: str,
+        embedder: str,
         vector: Sequence[float],
-        locale: str,
-        screen_id: str | None,
         limit: int,
-    ) -> list[ScoredChunk]: ...
+    ) -> list[ScoredChunk]:
+        """Nearest chunks by cosine similarity (score in [-1, 1], higher is closer)."""
+        ...
 
     def delete_article(self, app_id: str, article_id: str) -> None: ...
 

@@ -19,6 +19,9 @@ TEST_DB = os.environ.get(
 )
 os.environ["APPCOMPASS_DATABASE_URL"] = TEST_DB
 os.environ["APPCOMPASS_SPEC_DIR"] = str(REPO_ROOT / "spec")
+# Tests never download models or call paid APIs: hash embeddings, offline LLM.
+os.environ["APPCOMPASS_EMBEDDER"] = "hash"
+os.environ["APPCOMPASS_LLM_PROVIDER"] = "extractive"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -78,3 +81,55 @@ def clinic_manifest() -> dict:
     import json
 
     return json.loads((REPO_ROOT / "examples" / "clinic_demo" / "manifest.json").read_text(encoding="utf-8"))
+
+
+def parse_sse(text: str) -> list[tuple[str, dict]]:
+    """Turn an SSE body into [(event, data), ...]."""
+    import json
+
+    events = []
+    for frame in text.strip().split("\n\n"):
+        name = data = None
+        for line in frame.splitlines():
+            if line.startswith("event: "):
+                name = line[7:]
+            elif line.startswith("data: "):
+                data = json.loads(line[6:])
+        if name:
+            events.append((name, data))
+    return events
+
+
+@pytest.fixture()
+def clinic_ready(client, clinic_headers, clean_manifests, clinic_manifest):
+    """Clinic manifest and all 16 help articles loaded."""
+    from app.ingest import load_directory
+
+    assert client.post("/v1/apps/clinic-demo/manifest", json=clinic_manifest, headers=clinic_headers).status_code == 201
+    articles = [
+        {"id": a.article_id, "title": a.title, "screens": list(a.screen_ids), "locale": a.locale, "body": a.body}
+        for a in load_directory(REPO_ROOT / "examples" / "clinic_demo" / "help")
+    ]
+    r = client.post("/v1/apps/clinic-demo/docs", json={"articles": articles}, headers=clinic_headers)
+    assert r.status_code == 202, r.text
+    return r.json()
+
+
+@pytest.fixture()
+def use_llm():
+    """Swap the LLM adapter for one test: use_llm(fake)."""
+    from app import wiring
+    from app.adapters.embed_hash import HashEmbedder
+    from app.core.answer import AnswerService, RetrievalSettings
+
+    def _install(llm):
+        settings = wiring.get_settings()
+        service = AnswerService(HashEmbedder(), wiring.build_store(settings), llm,
+                                RetrievalSettings(min_score=settings.effective_min_score()))
+        wiring.answer_service.cache_clear()
+        wiring.answer_service = lambda: service  # type: ignore[assignment]
+        return service
+
+    original = wiring.answer_service
+    yield _install
+    wiring.answer_service = original

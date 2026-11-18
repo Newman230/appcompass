@@ -56,3 +56,24 @@ class Health(BaseModel):
     status: Literal["ok"]
     database: Literal["ok", "unavailable"]
     version: str
+
+
+class DocArticle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    title: str = Field(min_length=1, max_length=200)
+    screens: list[str] = Field(default_factory=list)
+    locale: str = Field(default="en", pattern=LOCALE_PATTERN)
+    body: str = Field(min_length=1, max_length=50_000)
+
+
+class DocsUpload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    articles: list[DocArticle] = Field(min_length=1, max_length=500)
+
+
+class DocsIngested(BaseModel):
+    app_id: str
+    articles: int
+    chunks: int
+    embedder: str

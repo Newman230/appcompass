@@ -28,16 +28,20 @@ services:
     environment:
       APPCOMPASS_DATABASE_URL: postgresql://appcompass:${APPCOMPASS_DB_PASSWORD:-appcompass}@db:5432/appcompass
       APPCOMPASS_SESSION_TTL_MINUTES: "30"
-      APPCOMPASS_LLM_PROVIDER: claude
-      APPCOMPASS_EMBEDDER: local-multilingual
+      APPCOMPASS_LLM_PROVIDER: ${APPCOMPASS_LLM_PROVIDER:-claude}   # or "extractive" to run without a key
+      APPCOMPASS_CLAUDE_MODEL: ${APPCOMPASS_CLAUDE_MODEL:-claude-haiku-5-5}
+      APPCOMPASS_EMBEDDER: ${APPCOMPASS_EMBEDDER:-fastembed}
       APPCOMPASS_VECTOR_STORE: pgvector
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}                      # from infra/.env, never committed
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8080:8080"
     volumes:
-      - ../examples:/srv/examples:ro   # so the CLI can load the clinic manifest
+      - ../examples:/srv/examples:ro   # so the CLI can load the clinic manifest and help articles
+      - models:/srv/models              # embedding model cache (~220 MB, downloaded once)
 
 volumes:
   db-data:
+  models:

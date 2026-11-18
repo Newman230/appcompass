@@ -4,15 +4,22 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    APPCOMPASS_SPEC_DIR=/srv/spec
+    APPCOMPASS_SPEC_DIR=/srv/spec \
+    APPCOMPASS_MODEL_CACHE=/srv/models \
+    HF_HOME=/srv/models/huggingface
 
 WORKDIR /srv
 COPY spec ./spec
 COPY server/pyproject.toml ./server/pyproject.toml
 COPY server/app ./server/app
 COPY server/migrations ./server/migrations
+# The model downloader writes caches, locks and logs under HF_HOME and $HOME,
+# so the user needs a real home and everything model-related lives in the
+# writable /srv/models volume.
 RUN pip install --no-cache-dir -e ./server \
-    && useradd --system --uid 10001 appcompass
+    && useradd --system --create-home --uid 10001 appcompass \
+    && mkdir -p /srv/models/huggingface && chown -R appcompass /srv/models
+    
 USER appcompass
 
 WORKDIR /srv/server

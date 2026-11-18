@@ -11,8 +11,9 @@ info:
     read and write its own app's data; using another app's `app_id` in a
     path returns 403.
 
-    Week 1 status: `health`, `sessions` and the manifest endpoints are
-    implemented. `messages`, `feedback` and `docs` return 501 until Week 2.
+    Status (Week 2): all endpoints implemented. Answers stream token,
+    citation, error and done events; action and handoff events arrive in
+    Week 4.
 servers:
   - url: http://localhost:8080
     description: Local Docker Compose
@@ -86,8 +87,14 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
-        "501":
-          $ref: "#/components/responses/NotImplemented"
+        "409":
+          description: The app has no manifest yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /v1/sessions/{session_id}/feedback:
     post:
@@ -109,8 +116,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
-        "501":
-          $ref: "#/components/responses/NotImplemented"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
   /v1/apps/{app_id}/manifest:
     get:
@@ -166,6 +173,7 @@ paths:
       tags: [apps]
       operationId: uploadDocs
       summary: Upload help articles for ingestion into the knowledge base
+      description: Articles are chunked, embedded and stored. Re-uploading an article id replaces it. Screens must exist in the manifest.
       parameters:
         - $ref: "#/components/parameters/AppId"
       requestBody:
@@ -176,13 +184,17 @@ paths:
               $ref: "#/components/schemas/DocsUpload"
       responses:
         "202":
-          description: Accepted for ingestion
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocsIngested"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "501":
-          $ref: "#/components/responses/NotImplemented"
+        "422":
+          $ref: "#/components/responses/ValidationError"
 
 components:
   securitySchemes:
@@ -234,12 +246,6 @@ components:
             $ref: "#/components/schemas/Error"
     ValidationError:
       description: Request body failed validation
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    NotImplemented:
-      description: Planned for a later week of the v1 build
       content:
         application/json:
           schema:
@@ -363,25 +369,46 @@ components:
 
     DocsUpload:
       type: object
+      additionalProperties: false
       required: [articles]
       properties:
         articles:
           type: array
           minItems: 1
+          maxItems: 500
           items:
             type: object
+            additionalProperties: false
             required: [id, title, body]
             properties:
               id:
                 type: string
+                pattern: "^[a-z0-9][a-z0-9_-]{0,63}$"
               title:
                 type: string
+                maxLength: 200
               screens:
                 type: array
                 items:
                   type: string
               locale:
                 type: string
+                default: en
               body:
                 type: string
+                maxLength: 50000
                 description: Markdown
+
+    DocsIngested:
+      type: object
+      required: [app_id, articles, chunks, embedder]
+      properties:
+        app_id:
+          type: string
+        articles:
+          type: integer
+        chunks:
+          type: integer
+        embedder:
+          type: string
+          description: Which embedding model produced the vectors, e.g. fastembed:sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
